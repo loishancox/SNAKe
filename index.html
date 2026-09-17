@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Nokia Snake</title>
+<style>
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: monospace, sans-serif;
+    user-select: none;
+  }
+  
+  body {
+    background-color: #000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    overflow: hidden;
+  }
+
+  /* 1.8 inch Nokia LCD ratio simulation (128x160 canvas scaling) */
+  #lcd-screen {
+    width: 100vw;
+    height: 100vh;
+    max-width: 240px;
+    max-height: 320px;
+    background-color: #9ebd20; /* OG Nokia LCD Green */
+    border: 4px solid #333;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px;
+  }
+
+  /* Pixel grid overlay effect */
+  #lcd-screen::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: linear-gradient(rgba(0,0,0,0.05) 50%, transparent 50%);
+    background-size: 100% 2px;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  .screen-view {
+    display: none;
+    width: 100%;
+    height: 100%;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    color: #111;
+  }
+
+  .active {
+    display: flex;
+  }
+
+  /* Splash / Boot Screen */
+  #startup-screen {
+    text-align: center;
+  }
+  .nokia-text {
+    font-size: 20px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    margin-bottom: 10px;
+    color: #111;
+  }
+  .hands-container {
+    font-size: 12px;
+    font-weight: bold;
+  }
+
+  /* Menu Screen */
+  .title {
+    font-size: 18px;
+    font-weight: bold;
+    border-bottom: 2px solid #111;
+    margin-bottom: 8px;
+    width: 100%;
+    text-align: center;
+  }
+  .menu-option {
+    font-size: 14px;
+    padding: 4px 8px;
+    margin: 2px 0;
+    width: 90%;
+    text-align: center;
+    font-weight: bold;
+  }
+  .menu-option.selected {
+    background-color: #111;
+    color: #9ebd20;
+  }
+
+  /* Game Canvas */
+  canvas {
+    background-color: #9ebd20;
+    border: 2px solid #111;
+    image-rendering: pixelated;
+  }
+
+  .score-bar {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    font-weight: bold;
+    margin-bottom: 4px;
+  }
+
+  .controls-hint {
+    font-size: 9px;
+    margin-top: 4px;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<div id="lcd-screen">
+  
+  <!-- 1. OG STARTUP SCREEN -->
+  <div id="startup-screen" class="screen-view active">
+    <div class="nokia-text">NOKIA</div>
+    <div class="hands-container" id="boot-status">Connecting...</div>
+  </div>
+
+  <!-- 2. MENU SCREEN -->
+  <div id="menu-screen" class="screen-view">
+    <div class="title">SNAKE</div>
+    <div id="opt1" class="menu-option selected">1. SNAKE 1</div>
+    <div id="opt2" class="menu-option">2. SNAKE 2</div>
+    <div class="controls-hint">Use 2/8 to Navigate<br>5 or OK to Select</div>
+  </div>
+
+  <!-- 3. GAMEPLAY SCREEN -->
+  <div id="game-screen" class="screen-view">
+    <div class="score-bar">
+      <span id="game-mode-label">SNAKE I</span>
+      <span id="score-val">0000</span>
+    </div>
+    <canvas id="gameCanvas" width="120" height="120"></canvas>
+    <div class="controls-hint">Controls: 2=Up 8=Down 4=Left 6=Right</div>
+  </div>
+
+  <!-- 4. GAME OVER SCREEN -->
+  <div id="gameover-screen" class="screen-view">
+    <div class="title">GAME OVER</div>
+    <div style="font-weight: bold; margin-bottom: 10px;">SCORE: <span id="final-score">0</span></div>
+    <div class="controls-hint">Press 5 or OK to return to menu</div>
+  </div>
+
+</div>
+
+<script>
+  const canvas = document.getElementById("gameCanvas");
+  const ctx = canvas.getContext("2d");
+
+  // Grid config: 12x12 grid (10px per tile)
+  const gridSize = 10;
+  const tileCount = 12;
+
+  let currentScreen = "startup";
+  let selectedGameMode = 1; // 1 or 2
+  let selectedMenuOpt = 1;
+  let gameInterval = null;
+
+  let snake = [];
+  let food = { x: 0, y: 0 };
+  let dx = 1;
+  let dy = 0;
+  let score = 0;
+
+  // Boot sequence simulation
+  setTimeout(() => {
+    document.getElementById("boot-status").innerText = "Loading...";
+    setTimeout(() => {
+      showScreen("menu-screen");
+      currentScreen = "menu";
+    }, 1200);
+  }, 1000);
+
+  function showScreen(id) {
+    document.querySelectorAll(".screen-view").forEach(s => s.classList.remove("active"));
+    document.getElementById(id).classList.add("active");
+  }
+
+  // Keybindings for Nokia Keypad / Keyboard
+  document.addEventListener("keydown", handleKeyPress);
+
+  function handleKeyPress(e) {
+    const key = e.key;
+
+    if (currentScreen === "menu") {
+      if (key === "ArrowUp" || key === "2") {
+        selectedMenuOpt = 1;
+        updateMenuUI();
+      } else if (key === "ArrowDown" || key === "8") {
+        selectedMenuOpt = 2;
+        updateMenuUI();
+      } else if (key === "Enter" || key === "5" || key === "SoftLeft") {
+        selectedGameMode = selectedMenuOpt;
+        startGame();
+      }
+    } 
+    else if (currentScreen === "game") {
+      // Direction Controls (2=Up, 8=Down, 4=Left, 6=Right & Arrow keys)
+      if ((key === "ArrowUp" || key === "2") && dy === 0) { dx = 0; dy = -1; }
+      else if ((key === "ArrowDown" || key === "8") && dy === 0) { dx = 0; dy = 1; }
+      else if ((key === "ArrowLeft" || key === "4") && dx === 0) { dx = -1; dy = 0; }
+      else if ((key === "ArrowRight" || key === "6") && dx === 0) { dx = 1; dy = 0; }
+    }
+    else if (currentScreen === "gameover") {
+      if (key === "Enter" || key === "5" || key === "SoftLeft") {
+        showScreen("menu-screen");
+        currentScreen = "menu";
+      }
+    }
+  }
+
+  function updateMenuUI() {
+    document.getElementById("opt1").classList.toggle("selected", selectedMenuOpt === 1);
+    document.getElementById("opt2").classList.toggle("selected", selectedMenuOpt === 2);
+  }
+
+  function startGame() {
+    showScreen("game-screen");
+    currentScreen = "game";
+    
+    document.getElementById("game-mode-label").innerText = selectedGameMode === 1 ? "SNAKE I" : "SNAKE II";
+    
+    snake = [{ x: 5, y: 5 }, { x: 4, y: 5 }, { x: 3, y: 5 }];
+    score = 0;
+    dx = 1;
+    dy = 0;
+    document.getElementById("score-val").innerText = "0000";
+    
+    placeFood();
+    
+    if (gameInterval) clearInterval(gameInterval);
+    gameInterval = setInterval(gameLoop, 150); // Classic Nokia tick rate
+  }
+
+  function placeFood() {
+    food.x = Math.floor(Math.random() * tileCount);
+    food.y = Math.floor(Math.random() * tileCount);
+  }
+
+  function gameLoop() {
+    let headX = snake[0].x + dx;
+    let headY = snake[0].y + dy;
+
+    // SNAKE 1 Mechanics: Walls Kill
+    if (selectedGameMode === 1) {
+      if (headX < 0 || headX >= tileCount || headY < 0 || headY >= tileCount) {
+        return gameOver();
+      }
+    } 
+    // SNAKE 2 Mechanics: Wrap Around Walls
+    else if (selectedGameMode === 2) {
+      if (headX < 0) headX = tileCount - 1;
+      if (headX >= tileCount) headX = 0;
+      if (headY < 0) headY = tileCount - 1;
+      if (headY >= tileCount) headY = 0;
+    }
+
+    // Self-Collision Detection
+    for (let i = 0; i < snake.length; i++) {
+      if (snake[i].x === headX && snake[i].y === headY) {
+        return gameOver();
+      }
+    }
+
+    // Move Snake
+    snake.unshift({ x: headX, y: headY });
+
+    // Food Eaten
+    if (headX === food.x && headY === food.y) {
+      score += 10;
+      document.getElementById("score-val").innerText = String(score).padStart(4, "0");
+      placeFood();
+    } else {
+      snake.pop();
+    }
+
+    render();
+  }
+
+  function render() {
+    // Clear LCD
+    ctx.fillStyle = "#9ebd20";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = "#111111";
+
+    // Draw Snake
+    snake.forEach(part => {
+      ctx.fillRect(part.x * gridSize, part.y * gridSize, gridSize - 1, gridSize - 1);
+    });
+
+    // Draw Food (Pixel Dot)
+    ctx.fillRect(food.x * gridSize + 2, food.y * gridSize + 2, gridSize - 4, gridSize - 4);
+  }
+
+  function gameOver() {
+    clearInterval(gameInterval);
+    document.getElementById("final-score").innerText = score;
+    showScreen("gameover-screen");
+    currentScreen = "gameover";
+  }
+</script>
+</body>
+</html>
+
