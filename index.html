@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Nokia Snake I</title>
+    <title>Nokia Arcade</title>
     <style>
+        /* Forces hardware viewport alignment on Series 30+ / Opera Mini engines */
         * {
             box-sizing: border-box;
             margin: 0;
@@ -12,223 +13,249 @@
             user-select: none;
             -webkit-user-select: none;
         }
-
-        body {
-            background-color: #111;
+        body, html {
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            overflow: hidden;
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 100vh;
-            width: 100vw;
-            overflow: hidden;
             font-family: monospace;
         }
 
-        /* Container sized appropriately for tiny/1.8" displays */
-        #screen-container {
+        /* 1.8-inch Container Engine (128x160 Native Scaling Mode) */
+        #viewport-container {
+            position: relative;
             width: 100vw;
             height: 100vh;
-            max-width: 128px;
-            max-height: 160px;
-            background-color: #8b956d; /* Nokia / GameBoy monochrome green LCD */
-            border: 4px solid #2b3318;
+            max-width: 320px;
+            max-height: 400px;
+            aspect-ratio: 128 / 160;
             display: flex;
             flex-direction: column;
-            justify-content: space-between;
-            align-items: center;
-            padding: 2px;
-            box-shadow: inset 0 0 10px rgba(0,0,0,0.2);
+            background: #7d8c6b;
+            padding: 4px;
+            transition: all 0.2s ease;
         }
 
-        #header {
+        /* Mode: Authentic Retro 1110/3310 Dot-Matrix Border Bezel */
+        #viewport-container.retro-bezel {
+            background: #111;
+            border: 8px solid #222;
+            border-radius: 4px;
+        }
+        #viewport-container.retro-bezel #screen-wrapper {
+            background: #8fa382;
+            border: 4px solid #55604d;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+        }
+
+        #screen-wrapper {
             width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        /* Status & Beep HUD Display Layout */
+        #hud-bar {
+            width: 100%;
+            height: 16px;
             display: flex;
             justify-content: space-between;
+            align-items: center;
             font-size: 10px;
+            color: #1c2416;
             font-weight: bold;
-            color: #2b3318;
-            padding: 0 2px;
-            line-height: 1;
+            padding: 0 4px;
+            border-bottom: 1px dashed #55604d;
         }
 
         canvas {
-            background-color: #8b956d;
-            border: 1px solid #2b3318;
+            width: 100%;
+            flex-grow: 1;
             image-rendering: pixelated;
+            background: transparent;
         }
 
-        #footer {
-            font-size: 8px;
-            font-weight: bold;
-            color: #2b3318;
+        #overlay-screen {
+            position: absolute;
+            top: 16px;
+            left: 0;
+            width: 100%;
+            bottom: 0;
+            background: rgba(143, 163, 130, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #1c2416;
+            padding: 8px;
             text-align: center;
-            height: 10px;
-            line-height: 10px;
         }
+        .menu-title { font-size: 14px; font-weight: bold; margin-bottom: 6px; text-transform: uppercase; }
+        .menu-item { font-size: 10px; margin: 2px 0; }
+        .menu-item.active { background: #1c2416; color: #8fa382; padding: 0 4px; }
     </style>
 </head>
 <body>
 
-<div id="screen-container">
-    <div id="header">
-        <span>SNAKE</span>
-        <span id="score">0</span>
+    <div id="viewport-container" class="retro-bezel">
+        <div id="screen-wrapper">
+            <!-- Nokia S30+ Top Display Ribbon Bar -->
+            <div id="hud-bar">
+                <span id="game-mode-label">SNAKE 1</span>
+                <span id="audio-indicator">🔊</span>
+                <span id="score-label">0000</span>
+            </div>
+
+            <!-- Resolution Context Matrix Element -->
+            <canvas id="gameCanvas"></canvas>
+
+            <!-- Virtual Selection Engine Frame Overlay -->
+            <div id="overlay-screen">
+                <div class="menu-title" id="modal-title">Nokia Arcade</div>
+                <div id="menu-options-box">
+                    <div class="menu-item active" id="opt-s1">[2/8 Select]</div>
+                    <div class="menu-item" id="opt-s2">Snake 1 (Classic)</div>
+                    <div class="menu-item" id="opt-s3">Snake 2 (Mazes)</div>
+                </div>
+                <div class="menu-item" style="margin-top:8px; font-size:8px;" id="modal-footer">Press ENTER/5 to Play</div>
+            </div>
+        </div>
     </div>
-    <canvas id="gameCanvas" width="84" height="48"></canvas>
-    <div id="footer" id="status">2,4,6,8:MOVE 5:PAUSE</div>
-</div>
 
-<script>
-    const canvas = document.getElementById("gameCanvas");
-    const ctx = canvas.getContext("2d");
-    const scoreElement = document.getElementById("score");
-    const statusElement = document.getElementById("footer");
-
-    // Original Nokia 84x48 resolution grid setup
-    const gridWidth = 21;
-    const gridHeight = 12;
-    const pixelSize = 4; // 21*4 = 84, 12*4 = 48
-
-    let snake = [];
-    let dir = { x: 1, y: 0 };
-    let nextDir = { x: 1, y: 0 };
-    let food = { x: 0, y: 0 };
-    let score = 0;
-    let isPaused = false;
-    let gameOver = false;
-    let gameInterval;
-
-    function initGame() {
-        snake = [
-            { x: 5, y: 6 },
-            { x: 4, y: 6 },
-            { x: 3, y: 6 }
-        ];
-        dir = { x: 1, y: 0 };
-        nextDir = { x: 1, y: 0 };
-        score = 0;
-        gameOver = false;
-        isPaused = false;
-        scoreElement.textContent = score;
-        statusElement.textContent = "2,4,6,8:MOVE 5:PAUSE";
-        placeFood();
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('viewport-container');
+        const overlay = document.getElementById('overlay-screen');
+        const scoreLabel = document.getElementById('score-label');
+        const modeLabel = document.getElementById('game-mode-label');
+        const audioIndicator = document.getElementById('audio-indicator');
         
-        if (gameInterval) clearInterval(gameInterval);
-        gameInterval = setInterval(gameLoop, 150); // Original Snake I speed
-    }
+        // Logical grid coordinates for classic pixel-density matrix
+        const gridWidth = 20;
+        const gridHeight = 22;
 
-    function placeFood() {
-        let valid = false;
-        while (!valid) {
-            food.x = Math.floor(Math.random() * gridWidth);
-            food.y = Math.floor(Math.random() * gridHeight);
-            valid = !snake.some(segment => segment.x === food.x && segment.y === food.y);
+        let gameState = 'MENU'; // MENU, PLAYING, PAUSED, GAME_OVER
+        let gameMode = 1;      // 1 = Snake 1, 2 = Snake 2
+        let soundEnabled = true;
+        let retroDisplayEngine = true;
+        let menuSelection = 1; // 1 = Snake 1, 2 = Snake 2
+
+        let snake = [];
+        let direction = { x: 1, y: 0 };
+        let nextDirection = { x: 1, y: 0 };
+        let food = { x: 0, y: 0 };
+        let score = 0;
+        let gameLoopInterval = null;
+        let currentSpeed = 140;
+
+        // Snake 2 Wall Geometry Definition Blocks
+        const mazes = [
+            // Outer Ring Blockades + Center Core Partition Walls
+            [{x:5, y:5}, {x:6, y:5}, {x:7, y:5}, {x:13, y:5}, {x:14, y:5}, {x:15, y:5},
+             {x:5, y:16}, {x:6, y:16}, {x:7, y:16}, {x:13, y:16}, {x:14, y:16}, {x:15, y:16},
+             {x:9, y:10}, {x:10, y:10}, {x:9, y:11}, {x:10, y:11}]
+        ];
+
+        // Custom Web Audio API Oscillator Synth Bleeps
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playBeep(freq, duration) {
+            if (!soundEnabled) return;
+            try {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'square';
+                osc.frequency.value = freq;
+                gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch(e) {}
         }
-    }
 
-    function gameLoop() {
-        if (isPaused || gameOver) return;
-
-        dir = nextDir;
-        const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
-
-        // Wall collisions (Snake 1 has wall boundaries)
-        if (head.x < 0 || head.x >= gridWidth || head.y < 0 || head.y >= gridHeight) {
-            triggerGameOver();
-            return;
+        function resizeCanvas() {
+            canvas.width = canvas.clientWidth;
+            canvas.height = canvas.clientHeight;
         }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
 
-        // Self collision
-        if (snake.some(segment => segment.x === head.x && segment.y === head.y)) {
-            triggerGameOver();
-            return;
-        }
+        // System Interface Controller Key Bindings Mapping
+        window.addEventListener('keydown', function(e) {
+            const key = e.key.toLowerCase();
 
-        snake.unshift(head);
+            // Intercept standard default scrolling logic for feature phone inputs
+            if(["arrowup","arrowdown","arrowleft","arrowright"," "].includes(e.key)) {
+                e.preventDefault();
+            }
 
-        // Eat Food
-        if (head.x === food.x && head.y === food.y) {
-            score += 1;
-            scoreElement.textContent = score;
-            placeFood();
-        } else {
-            snake.pop();
-        }
+            // Global Control Logic Action Toggles (#, 0, *)
+            if (e.key === '#') {
+                soundEnabled = !soundEnabled;
+                audioIndicator.innerText = soundEnabled ? "🔊" : "🔇";
+                playBeep(400, 0.05);
+                return;
+            }
+            if (e.key === '0') {
+                gameMode = gameMode === 1 ? 2 : 1;
+                modeLabel.innerText = `SNAKE ${gameMode}`;
+                playBeep(600, 0.05);
+                if(gameState === 'PLAYING') resetGame();
+                else updateMenuUI();
+                return;
+            }
+            if (e.key === '*') {
+                retroDisplayEngine = !retroDisplayEngine;
+                container.className = retroDisplayEngine ? "retro-bezel" : "";
+                resizeCanvas();
+                playBeep(500, 0.05);
+                return;
+            }
 
-        draw();
-    }
+            // Menu Viewport Logic Flow Navigation
+            if (gameState === 'MENU' || gameState === 'GAME_OVER') {
+                if (key === '2' || e.key === 'ArrowUp') {
+                    menuSelection = 1;
+                    updateMenuUI();
+                    playBeep(300, 0.03);
+                } else if (key === '8' || e.key === 'ArrowDown') {
+                    menuSelection = 2;
+                    updateMenuUI();
+                    playBeep(300, 0.03);
+                } else if (e.key === 'Enter' || key === '5') {
+                    gameMode = menuSelection;
+                    modeLabel.innerText = `SNAKE ${gameMode}`;
+                    resetGame();
+                }
+                return;
+            }
 
-    function draw() {
-        // Clear screen with LCD background color
-        ctx.fillStyle = "#8b956d";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        // Draw Snake (Monochrome Dark Green/Black Pixels)
-        ctx.fillStyle = "#2b3318";
-        snake.forEach((segment, index) => {
-            // Main segment body
-            ctx.fillRect(
-                segment.x * pixelSize, 
-                segment.y * pixelSize, 
-                pixelSize - 1, 
-                pixelSize - 1
-            );
+            // Live Game Intercept Directives
+            if (gameState === 'PLAYING') {
+                if ((key === '2' || e.key === 'ArrowUp') && direction.y === 0) nextDirection = { x: 0, y: -1 };
+                else if ((key === '8' || e.key === 'ArrowDown') && direction.y === 0) nextDirection = { x: 0, y: 1 };
+                else if ((key === '4' || e.key === 'ArrowLeft') && direction.x === 0) nextDirection = { x: -1, y: 0 };
+                else if ((key === '6' || e.key === 'ArrowRight') && direction.x === 0) nextDirection = { x: 1, y: 0 };
+                else if (key === '5') {
+                    gameState = 'PAUSED';
+                    overlay.style.display = 'flex';
+                    document.getElementById('modal-title').innerText = "PAUSED";
+                    document.getElementById('menu-options-box').innerHTML = '<div class="menu-item active">Resume (5/Enter)</div>';
+                    playBeep(200, 0.1);
+                }
+            } else if (gameState === 'PAUSED') {
+                if (key === '5' || e.key === 'Enter') {
+                    gameState = 'PLAYING';
+                    overlay.style.display = 'none';
+                    playBeep(440, 0.08);
+                }
+            }
         });
 
-        // Draw Food (Single pixel dot style)
-        ctx.fillRect(
-            food.x * pixelSize + 1, 
-            food.y * pixelSize + 1, 
-            pixelSize - 2, 
-            pixelSize - 2
-        );
-    }
-
-    function triggerGameOver() {
-        gameOver = true;
-        statusElement.textContent = "GAME OVER! PRESS 5";
-        ctx.fillStyle = "#2b3318";
-        ctx.font = "8px monospace";
-        ctx.fillText("GAME OVER", 18, 26);
-    }
-
-    // Keypad Controls Logic (Keyboard Numpad & Standard Numbers)
-    window.addEventListener("keydown", (e) => {
-        const key = e.key;
-
-        if (gameOver) {
-            if (key === "5" || key === "Enter") {
-                initGame();
-            }
-            return;
-        }
-
-        // 2: UP
-        if ((key === "2" || key === "ArrowUp") && dir.y === 0) {
-            nextDir = { x: 0, y: -1 };
-        }
-        // 8: DOWN
-        else if ((key === "8" || key === "ArrowDown") && dir.y === 0) {
-            nextDir = { x: 0, y: 1 };
-        }
-        // 4: LEFT
-        else if ((key === "4" || key === "ArrowLeft") && dir.x === 0) {
-            nextDir = { x: -1, y: 0 };
-        }
-        // 6: RIGHT
-        else if ((key === "6" || key === "ArrowRight") && dir.x === 0) {
-            nextDir = { x: 1, y: 0 };
-        }
-        // 5 or OK / Enter: PAUSE / UNPAUSE
-        else if (key === "5" || key === "Enter" || key.toLowerCase() === "ok") {
-            isPaused = !isPaused;
-            statusElement.textContent = isPaused ? "PAUSED" : "2,4,6,8:MOVE 5:PAUSE";
-        }
-    });
-
-    // Auto-start immediately upon loading
-    initGame();
-</script>
-
-</body>
-</html>
