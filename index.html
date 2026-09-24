@@ -1,171 +1,232 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Nokia SNAKe</title>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; text-decoration: none; }
-        body, html { 
-            width: 100%; height: 100%; 
-            background: #7d8c6b; 
-            font-family: monospace; 
-            color: #1c2416;
-            overflow: hidden;
-        }
-        #game-container {
-            width: 128px;
-            height: 160px;
-            margin: 0 auto;
-            display: flex;
-            flex-direction: column;
-            position: relative;
-        }
-        #hud {
-            width: 100%;
-            height: 14px;
-            font-size: 11px;
-            font-weight: bold;
-            display: flex;
-            justify-content: space-between;
-            padding: 0 4px;
-            border-bottom: 1px solid #1c2416;
-        }
-        #grid-display {
-            width: 100%;
-            height: 100px;
-            background: #8fa382;
-            display: grid;
-            grid-template-columns: repeat(12, 1fr);
-            grid-template-rows: repeat(10, 1fr);
-        }
-        .cell { border: 0.5px solid rgba(28, 36, 22, 0.05); }
-        .snake { background: #1c2416; }
-        .food { background: #3a4d2f; border: 2px solid #1c2416; }
-        
-        /* Links arranged as a giant d-pad grid that Opera Mini can click */
-        #control-links {
-            width: 100%;
-            height: 46px;
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            grid-template-rows: repeat(2, 1fr);
-            background: #55604d;
-            gap: 1px;
-        }
-        .nav-link {
-            background: #7d8c6b;
-            color: #1c2416;
-            font-size: 10px;
-            font-weight: bold;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-        }
-        .nav-link:transparent { background: #55604d; }
-    </style>
+  <meta charset="UTF-8">
+  <title>Snake - Sony Remote Edition</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: #0f380f;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      font-family: monospace;
+      color: #0f380f;
+      overflow: hidden;
+    }
+    #game-container {
+      background-color: #9bbc0f;
+      border: 12px solid #8bac0f;
+      padding: 16px;
+      border-radius: 8px;
+      text-align: center;
+      box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    }
+    #header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 22px;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+    canvas {
+      background-color: #8bac0f;
+      border: 4px solid #306230;
+      display: block;
+    }
+    #footer {
+      margin-top: 12px;
+      font-size: 14px;
+      font-weight: bold;
+    }
+  </style>
 </head>
 <body>
 
-    <div id="game-container">
-        <div id="hud">
-            <span>SCORE: <span id="score-val">0</span></span>
-            <span>SPD: <span id="speed-val">1</span></span>
-        </div>
+<div id="game-container">
+  <div id="header">
+    <span id="mode-text">SNAKE I</span>
+    <span id="score-text">SCORE: 0</span>
+  </div>
+  <canvas id="gameCanvas" width="400" height="400"></canvas>
+  <div id="footer">
+    D-PAD: Move | OK: Pause/Restart | 1: Snake I | 2: Snake II
+  </div>
+</div>
 
-        <!-- Pure HTML Grid Layout -->
-        <div id="grid-display" id="matrix-board"></div>
+<script>
+  const canvas = document.getElementById("gameCanvas");
+  const ctx = canvas.getContext("2d");
+  const scoreElem = document.getElementById("score-text");
+  const modeElem = document.getElementById("mode-text");
 
-        <!-- Clickable Links that your Nokia mouse cursor can click -->
-        <div id="control-links">
-            <a href="javascript:void(0);" class="nav-link" id="btn-1" onclick="changeSpeed(-1)">1 ⏬</a>
-            <a href="javascript:void(0);" class="nav-link" id="btn-2" onclick="setDir(0,-1)">2 ⬆️</a>
-            <a href="javascript:void(0);" class="nav-link" id="btn-3" onclick="changeSpeed(1)">3 ⏫</a>
-            <a href="javascript:void(0);" class="nav-link" id="btn-4" onclick="setDir(-1,0)">4 ⬅️</a>
-            <a href="javascript:void(0);" class="nav-link" id="btn-8" onclick="setDir(0,1)">8 ⬇️</a>
-            <a href="javascript:void(0);" class="nav-link" id="btn-6" onclick="setDir(1,0)">6 ➡️</a>
-        </div>
-    </div>
+  const GRID_SIZE = 20;
+  const TILE_COUNT = canvas.width / GRID_SIZE;
 
-    <script>
-        const board = document.getElementById('grid-display');
-        const scoreLbl = document.getElementById('score-val');
-        const speedLbl = document.getElementById('speed-val');
+  let gameMode = 1; // 1 = Snake 1 (Solid Walls), 2 = Snake 2 (Screen Wrap)
+  let snake = [{ x: 10, y: 10 }];
+  let dx = 1, dy = 0;
+  let nextDx = 1, nextDy = 0;
+  let food = { x: 5, y: 5 };
+  let score = 0;
+  let isPaused = false;
+  let gameOver = false;
 
-        const cols = 12;
-        const rows = 10;
-        let snake = [{x:4, y:5}, {x:3, y:5}];
-        let dir = {x:1, y:0};
-        let food = {x:8, y:5};
-        let score = 0;
-        let speedLevel = 1;
-        let speeds =;
-        let loop = null;
+  function resetGame() {
+    snake = [{ x: 10, y: 10 }];
+    dx = 1; dy = 0;
+    nextDx = 1; nextDy = 0;
+    score = 0;
+    scoreElem.innerText = "SCORE: " + score;
+    gameOver = false;
+    isPaused = false;
+    spawnFood();
+  }
 
-        function buildGrid() {
-            board.innerHTML = '';
-            for (let y = 0; y < rows; y++) {
-                for (let x = 0; x < cols; x++) {
-                    const cell = document.createElement('div');
-                    cell.className = 'cell';
-                    
-                    if (snake.some(s => s.x === x && s.y === y)) {
-                        cell.className += ' snake';
-                    } else if (food.x === x && food.y === y) {
-                        cell.className += ' food';
-                    }
-                    board.appendChild(cell);
-                }
-            }
+  function spawnFood() {
+    food.x = Math.floor(Math.random() * TILE_COUNT);
+    food.y = Math.floor(Math.random() * TILE_COUNT);
+  }
+
+  function update() {
+    if (isPaused || gameOver) return;
+
+    dx = nextDx;
+    dy = nextDy;
+
+    let head = { x: snake[0].x + dx, y: snake[0].y + dy };
+
+    // Snake II Mode: Wrap around screen borders
+    if (gameMode === 2) {
+      if (head.x < 0) head.x = TILE_COUNT - 1;
+      if (head.x >= TILE_COUNT) head.x = 0;
+      if (head.y < 0) head.y = TILE_COUNT - 1;
+      if (head.y >= TILE_COUNT) head.y = 0;
+    } else {
+      // Snake I Mode: Wall collision = Game Over
+      if (head.x < 0 || head.x >= TILE_COUNT || head.y < 0 || head.y >= TILE_COUNT) {
+        gameOver = true;
+        return;
+      }
+    }
+
+    // Self-collision check
+    for (let i = 0; i < snake.length; i++) {
+      if (head.x === snake[i].x && head.y === snake[i].y) {
+        gameOver = true;
+        return;
+      }
+    }
+
+    snake.unshift(head);
+
+    // Food collision
+    if (head.x === food.x && head.y === food.y) {
+      score += 10;
+      scoreElem.innerText = "SCORE: " + score;
+      spawnFood();
+    } else {
+      snake.pop();
+    }
+  }
+
+  function draw() {
+    // Game Boy light olive green background
+    ctx.fillStyle = "#8bac0f";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Draw Snake I outer border
+    if (gameMode === 1) {
+      ctx.strokeStyle = "#0f380f";
+      ctx.lineWidth = 4;
+      ctx.strokeRect(0, 0, canvas.width, canvas.height);
+    }
+
+    // Draw Food (Dark green block)
+    ctx.fillStyle = "#0f380f";
+    ctx.fillRect(food.x * GRID_SIZE, food.y * GRID_SIZE, GRID_SIZE - 2, GRID_SIZE - 2);
+
+    // Draw Snake body
+    ctx.fillStyle = "#306230";
+    snake.forEach(part => {
+      ctx.fillRect(part.x * GRID_SIZE, part.y * GRID_SIZE, GRID_SIZE - 2, GRID_SIZE - 2);
+    });
+
+    // Overlays
+    if (isPaused) {
+      ctx.fillStyle = "#0f380f";
+      ctx.font = "24px monospace";
+      ctx.fillText("PAUSED", 150, 200);
+    } else if (gameOver) {
+      ctx.fillStyle = "#0f380f";
+      ctx.font = "24px monospace";
+      ctx.fillText("GAME OVER", 130, 190);
+      ctx.font = "14px monospace";
+      ctx.fillText("Press OK to Restart", 120, 220);
+    }
+  }
+
+  function main() {
+    update();
+    draw();
+  }
+
+  // Key Event Handlers for Sony Remote Mapping
+  window.addEventListener("keydown", function(e) {
+    const key = e.keyCode || e.which;
+
+    // Prevent TV browser from scrolling on D-pad navigation
+    if([37, 38, 39, 40, 13].indexOf(key) > -1) {
+      e.preventDefault();
+    }
+
+    switch (key) {
+      // D-Pad Movement
+      case 37: // Left Arrow
+        if (dx === 0) { nextDx = -1; nextDy = 0; }
+        break;
+      case 38: // Up Arrow
+        if (dy === 0) { nextDx = 0; nextDy = -1; }
+        break;
+      case 39: // Right Arrow
+        if (dx === 0) { nextDx = 1; nextDy = 0; }
+        break;
+      case 40: // Down Arrow
+        if (dy === 0) { nextDx = 0; nextDy = 1; }
+        break;
+
+      // Central OK / Enter Button
+      case 13:
+      case 29443: // Sony TV specific select code
+        if (gameOver) {
+          resetGame();
+        } else {
+          isPaused = !isPaused;
         }
+        break;
 
-        function setDir(nx, ny) {
-            if ((nx !== 0 && dir.x === 0) || (ny !== 0 && dir.y === 0)) {
-                dir = {x: nx, y: ny};
-            }
-            tick(); // Instantly update view when Nokia forces page link refresh
-        }
+      // Number '1' Button (Snake I)
+      case 49:
+      case 18:
+        gameMode = 1;
+        modeElem.innerText = "SNAKE I";
+        resetGame();
+        break;
 
-        function changeSpeed(delta) {
-            speedLevel = Math.max(1, Math.min(4, speedLevel + delta));
-            speedLbl.innerText = speedLevel;
-            clearInterval(loop);
-            loop = setInterval(tick, speeds[speedLevel - 1]);
-        }
+      // Number '2' Button (Snake II)
+      case 50:
+      case 19:
+        gameMode = 2;
+        modeElem.innerText = "SNAKE II";
+        resetGame();
+        break;
+    }
+  });
 
-        function tick() {
-            let head = {x: snake[0].x + dir.x, y: snake[0].y + dir.y};
-
-            // Wrap edges
-            if (head.x >= cols) head.x = 0; if (head.x < 0) head.x = cols - 1;
-            if (head.y >= rows) head.y = 0; if (head.y < 0) head.y = rows - 1;
-
-            // Self crash
-            if (snake.some(s => s.x === head.x && s.y === head.y)) {
-                snake = [{x:4, y:5}, {x:3, y:5}];
-                dir = {x:1, y:0};
-                score = 0;
-                scoreLbl.innerText = score;
-            }
-
-            snake.unshift(head);
-
-            if (head.x === food.x && head.y === food.y) {
-                score += 10;
-                scoreLbl.innerText = score;
-                food = {
-                    x: Math.floor(Math.random() * cols),
-                    y: Math.floor(Math.random() * rows)
-                };
-            } else {
-                snake.pop();
-            }
-            buildGrid();
-        }
-
-        buildGrid();
-        loop = setInterval(tick, speeds[speedLevel - 1]);
-    </script>
+  resetGame();
+  setInterval(main, 100);
+</script>
 </body>
 </html>
