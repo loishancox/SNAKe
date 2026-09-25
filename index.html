@@ -2,9 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>SNAKe</title>
+  <title>Full Screen TV Snake</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
     body {
       background-color: #0f380f;
       display: flex;
@@ -12,33 +17,40 @@
       align-items: center;
       justify-content: center;
       height: 100vh;
+      width: 100vw;
       font-family: monospace;
       color: #0f380f;
-      overflow: hidden;
     }
     #game-container {
       background-color: #9bbc0f;
-      border: 12px solid #8bac0f;
-      padding: 16px;
-      border-radius: 8px;
+      border: 16px solid #8bac0f;
+      padding: 12px;
+      border-radius: 12px;
       text-align: center;
-      box-shadow: 0 0 20px rgba(0,0,0,0.5);
+      box-shadow: 0 0 30px rgba(0,0,0,0.8);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 95vw;
+      height: 95vh;
     }
     #header {
+      width: 100%;
       display: flex;
       justify-content: space-between;
-      font-size: 22px;
+      font-size: 32px;
       font-weight: bold;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
     }
     canvas {
       background-color: #8bac0f;
-      border: 4px solid #306230;
+      border: 6px solid #306230;
       display: block;
     }
     #footer {
-      margin-top: 12px;
-      font-size: 14px;
+      margin-top: 8px;
+      font-size: 18px;
       font-weight: bold;
     }
   </style>
@@ -50,7 +62,7 @@
     <span id="mode-text">SNAKE I</span>
     <span id="score-text">SCORE: 0</span>
   </div>
-  <canvas id="gameCanvas" width="400" height="400"></canvas>
+  <canvas id="gameCanvas"></canvas>
   <div id="footer">
     2: UP | 4: LEFT | 6: RIGHT | 8: DOWN | OK: SWITCH MODE / RESTART
   </div>
@@ -62,19 +74,40 @@
   const scoreElem = document.getElementById("score-text");
   const modeElem = document.getElementById("mode-text");
 
-  const GRID_SIZE = 20;
-  const TILE_COUNT = canvas.width / GRID_SIZE;
+  // Bigger grid size (40px blocks) so it doesn't take forever to cross
+  const GRID_SIZE = 40; 
+  let cols = 0;
+  let rows = 0;
 
-  let gameMode = 1; // 1 = Snake 1 (Walls lose), 2 = Snake 2 (Pass-through walls)
-  let snake = [{ x: 10, y: 10 }];
+  let gameMode = 1; // 1 = Snake I (Solid Walls), 2 = Snake II (Wrap Walls)
+  let snake = [];
   let dx = 1, dy = 0;
   let nextDx = 1, nextDy = 0;
-  let food = { x: 5, y: 5 };
+  let food = { x: 0, y: 0 };
   let score = 0;
   let gameOver = false;
 
+  function resizeCanvas() {
+    const container = document.getElementById("game-container");
+    const headerHeight = document.getElementById("header").offsetHeight;
+    const footerHeight = document.getElementById("footer").offsetHeight;
+    
+    const availableWidth = container.clientWidth - 40;
+    const availableHeight = container.clientHeight - headerHeight - footerHeight - 60;
+
+    cols = Math.floor(availableWidth / GRID_SIZE);
+    rows = Math.floor(availableHeight / GRID_SIZE);
+
+    canvas.width = cols * GRID_SIZE;
+    canvas.height = rows * GRID_SIZE;
+
+    resetGame();
+  }
+
   function resetGame() {
-    snake = [{ x: 10, y: 10 }];
+    const startX = Math.floor(cols / 2);
+    const startY = Math.floor(rows / 2);
+    snake = [{ x: startX, y: startY }];
     dx = 1; dy = 0;
     nextDx = 1; nextDy = 0;
     score = 0;
@@ -84,8 +117,8 @@
   }
 
   function spawnFood() {
-    food.x = Math.floor(Math.random() * TILE_COUNT);
-    food.y = Math.floor(Math.random() * TILE_COUNT);
+    food.x = Math.floor(Math.random() * cols);
+    food.y = Math.floor(Math.random() * rows);
   }
 
   function update() {
@@ -98,13 +131,13 @@
 
     // Snake II Mode: Wrap around screen borders
     if (gameMode === 2) {
-      if (head.x < 0) head.x = TILE_COUNT - 1;
-      if (head.x >= TILE_COUNT) head.x = 0;
-      if (head.y < 0) head.y = TILE_COUNT - 1;
-      if (head.y >= TILE_COUNT) head.y = 0;
+      if (head.x < 0) head.x = cols - 1;
+      if (head.x >= cols) head.x = 0;
+      if (head.y < 0) head.y = rows - 1;
+      if (head.y >= rows) head.y = 0;
     } else {
       // Snake I Mode: Wall collision = Game Over
-      if (head.x < 0 || head.x >= TILE_COUNT || head.y < 0 || head.y >= TILE_COUNT) {
+      if (head.x < 0 || head.x >= cols || head.y < 0 || head.y >= rows) {
         gameOver = true;
         return;
       }
@@ -131,34 +164,34 @@
   }
 
   function draw() {
-    // Game Boy light olive green background
+    // Canvas Background (Game Boy light olive green)
     ctx.fillStyle = "#8bac0f";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Draw Snake I outer border
+    // Outer border for Snake I
     if (gameMode === 1) {
       ctx.strokeStyle = "#0f380f";
-      ctx.lineWidth = 4;
+      ctx.lineWidth = 6;
       ctx.strokeRect(0, 0, canvas.width, canvas.height);
     }
 
     // Draw Food (Dark green block)
     ctx.fillStyle = "#0f380f";
-    ctx.fillRect(food.x * GRID_SIZE, food.y * GRID_SIZE, GRID_SIZE - 2, GRID_SIZE - 2);
+    ctx.fillRect(food.x * GRID_SIZE, food.y * GRID_SIZE, GRID_SIZE - 4, GRID_SIZE - 4);
 
-    // Draw Snake body
+    // Draw Snake body (Chunky olive green blocks)
     ctx.fillStyle = "#306230";
     snake.forEach(part => {
-      ctx.fillRect(part.x * GRID_SIZE, part.y * GRID_SIZE, GRID_SIZE - 2, GRID_SIZE - 2);
+      ctx.fillRect(part.x * GRID_SIZE, part.y * GRID_SIZE, GRID_SIZE - 4, GRID_SIZE - 4);
     });
 
     // Game Over Overlay
     if (gameOver) {
       ctx.fillStyle = "#0f380f";
-      ctx.font = "24px monospace";
-      ctx.fillText("GAME OVER", 130, 190);
-      ctx.font = "14px monospace";
-      ctx.fillText("Press OK to Restart", 120, 220);
+      ctx.font = "bold 40px monospace";
+      ctx.fillText("GAME OVER", (canvas.width / 2) - 110, canvas.height / 2);
+      ctx.font = "20px monospace";
+      ctx.fillText("Press OK to Restart", (canvas.width / 2) - 110, (canvas.height / 2) + 40);
     }
   }
 
@@ -167,47 +200,45 @@
     draw();
   }
 
-  // Key Listeners for Sony TV Remote
+  // Key Listeners for Sony Remote
   window.addEventListener("keydown", function(e) {
     const key = e.keyCode || e.which;
 
-    // Prevent TV browser default scrolling behavior
     if([37, 38, 39, 40, 13, 50, 52, 54, 56].indexOf(key) > -1) {
       e.preventDefault();
     }
 
     switch (key) {
       // 2 Key (UP)
-      case 50: // Standard '2'
-      case 19: // Sony TV '2'
+      case 50:
+      case 19:
         if (dy === 0) { nextDx = 0; nextDy = -1; }
         break;
 
       // 4 Key (LEFT)
-      case 52: // Standard '4'
-      case 21: // Sony TV '4'
+      case 52:
+      case 21:
         if (dx === 0) { nextDx = -1; nextDy = 0; }
         break;
 
       // 6 Key (RIGHT)
-      case 54: // Standard '6'
-      case 23: // Sony TV '6'
+      case 54:
+      case 23:
         if (dx === 0) { nextDx = 1; nextDy = 0; }
         break;
 
       // 8 Key (DOWN)
-      case 56: // Standard '8'
-      case 25: // Sony TV '8'
+      case 56:
+      case 25:
         if (dy === 0) { nextDx = 0; nextDy = 1; }
         break;
 
       // OK / Enter Button (Switch Mode OR Restart)
       case 13:
-      case 29443: // Sony TV Enter/Select code
+      case 29443:
         if (gameOver) {
           resetGame();
         } else {
-          // Switch between Snake I and Snake II
           gameMode = (gameMode === 1) ? 2 : 1;
           modeElem.innerText = (gameMode === 1) ? "SNAKE I" : "SNAKE II";
           resetGame();
@@ -216,7 +247,8 @@
     }
   });
 
-  resetGame();
+  window.addEventListener("resize", resizeCanvas);
+  resizeCanvas();
   setInterval(main, 100);
 </script>
 </body>
