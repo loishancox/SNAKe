@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Snake - Sony Remote Edition</title>
+  <title>SNAKe</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -52,7 +52,7 @@
   </div>
   <canvas id="gameCanvas" width="400" height="400"></canvas>
   <div id="footer">
-    D-PAD: Move | OK: Pause/Restart | 1: Snake I | 2: Snake II
+    2: UP | 4: LEFT | 6: RIGHT | 8: DOWN | OK: SWITCH MODE / RESTART
   </div>
 </div>
 
@@ -65,13 +65,12 @@
   const GRID_SIZE = 20;
   const TILE_COUNT = canvas.width / GRID_SIZE;
 
-  let gameMode = 1; // 1 = Snake 1 (Solid Walls), 2 = Snake 2 (Screen Wrap)
+  let gameMode = 1; // 1 = Snake 1 (Walls lose), 2 = Snake 2 (Pass-through walls)
   let snake = [{ x: 10, y: 10 }];
   let dx = 1, dy = 0;
   let nextDx = 1, nextDy = 0;
   let food = { x: 5, y: 5 };
   let score = 0;
-  let isPaused = false;
   let gameOver = false;
 
   function resetGame() {
@@ -81,7 +80,6 @@
     score = 0;
     scoreElem.innerText = "SCORE: " + score;
     gameOver = false;
-    isPaused = false;
     spawnFood();
   }
 
@@ -91,7 +89,7 @@
   }
 
   function update() {
-    if (isPaused || gameOver) return;
+    if (gameOver) return;
 
     dx = nextDx;
     dy = nextDy;
@@ -154,12 +152,8 @@
       ctx.fillRect(part.x * GRID_SIZE, part.y * GRID_SIZE, GRID_SIZE - 2, GRID_SIZE - 2);
     });
 
-    // Overlays
-    if (isPaused) {
-      ctx.fillStyle = "#0f380f";
-      ctx.font = "24px monospace";
-      ctx.fillText("PAUSED", 150, 200);
-    } else if (gameOver) {
+    // Game Over Overlay
+    if (gameOver) {
       ctx.fillStyle = "#0f380f";
       ctx.font = "24px monospace";
       ctx.fillText("GAME OVER", 130, 190);
@@ -173,54 +167,51 @@
     draw();
   }
 
-  // Key Event Handlers for Sony Remote Mapping
+  // Key Listeners for Sony TV Remote
   window.addEventListener("keydown", function(e) {
     const key = e.keyCode || e.which;
 
-    // Prevent TV browser from scrolling on D-pad navigation
-    if([37, 38, 39, 40, 13].indexOf(key) > -1) {
+    // Prevent TV browser default scrolling behavior
+    if([37, 38, 39, 40, 13, 50, 52, 54, 56].indexOf(key) > -1) {
       e.preventDefault();
     }
 
     switch (key) {
-      // D-Pad Movement
-      case 37: // Left Arrow
-        if (dx === 0) { nextDx = -1; nextDy = 0; }
-        break;
-      case 38: // Up Arrow
+      // 2 Key (UP)
+      case 50: // Standard '2'
+      case 19: // Sony TV '2'
         if (dy === 0) { nextDx = 0; nextDy = -1; }
         break;
-      case 39: // Right Arrow
+
+      // 4 Key (LEFT)
+      case 52: // Standard '4'
+      case 21: // Sony TV '4'
+        if (dx === 0) { nextDx = -1; nextDy = 0; }
+        break;
+
+      // 6 Key (RIGHT)
+      case 54: // Standard '6'
+      case 23: // Sony TV '6'
         if (dx === 0) { nextDx = 1; nextDy = 0; }
         break;
-      case 40: // Down Arrow
+
+      // 8 Key (DOWN)
+      case 56: // Standard '8'
+      case 25: // Sony TV '8'
         if (dy === 0) { nextDx = 0; nextDy = 1; }
         break;
 
-      // Central OK / Enter Button
+      // OK / Enter Button (Switch Mode OR Restart)
       case 13:
-      case 29443: // Sony TV specific select code
+      case 29443: // Sony TV Enter/Select code
         if (gameOver) {
           resetGame();
         } else {
-          isPaused = !isPaused;
+          // Switch between Snake I and Snake II
+          gameMode = (gameMode === 1) ? 2 : 1;
+          modeElem.innerText = (gameMode === 1) ? "SNAKE I" : "SNAKE II";
+          resetGame();
         }
-        break;
-
-      // Number '1' Button (Snake I)
-      case 49:
-      case 18:
-        gameMode = 1;
-        modeElem.innerText = "SNAKE I";
-        resetGame();
-        break;
-
-      // Number '2' Button (Snake II)
-      case 50:
-      case 19:
-        gameMode = 2;
-        modeElem.innerText = "SNAKE II";
-        resetGame();
         break;
     }
   });
